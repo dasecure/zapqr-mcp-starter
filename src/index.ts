@@ -12,9 +12,9 @@
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { bearerToken, challenge, protectedResourceMetadata, verifyBearer, DEFAULT_ISSUER, SCOPE } from './auth.ts';
-import { buildServer } from './tools.ts';
+import { buildServer, type ToolEnv } from './tools.ts';
 
-export interface Env {
+export interface Env extends ToolEnv {
   /** Optional. The authorization server; defaults to https://auth.zapqr.ai. */
   ZAPQR_ISSUER?: string;
   /** Optional. This server's registered identifier. Defaults to <origin>/mcp of the incoming request. */
@@ -91,7 +91,7 @@ export default {
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
-    const server = buildServer();
+    const server = buildServer(env);
     await server.connect(transport);
     const res = await transport.handleRequest(request, {
       authInfo: {

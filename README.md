@@ -59,9 +59,21 @@ After you register on `/account/agents` you get exactly three strings. The Worke
 
 **The `RESOURCE` string must match what you registered, character for character.** Trailing slash, port, path — all of it. It's an identifier, not a URL anyone fetches.
 
-## Add your tools
+## The tools it ships with
 
-[`src/tools.ts`](src/tools.ts) registers two: `whoami` (proves the identity made it through) and `echo`. Replace them. Each handler gets `extra.authInfo.extra.identity` — the same person on every call, verified on every request, no session to keep.
+[`src/tools.ts`](src/tools.ts) registers five, and they are there to show the identity doing work, not to be kept:
+
+| Tool | What it proves |
+|---|---|
+| `whoami` | the verified identity made it through: `sub`, `email (verified by ZapQR)`, scopes, which agent |
+| `echo` | the tool round trip |
+| `remember` / `recall` / `forget` | **per-person isolation** — notes live in Cloudflare KV under `sub:` and two people connecting the same server each see only their own. No login form, no API key, no user table; the isolation is a key prefix |
+
+`remember`/`recall` need a KV namespace: `npx wrangler kv namespace create NOTES`, paste the id into `wrangler.toml`. Without it the three tools answer with a clear error and everything else works.
+
+## Add your own
+
+Each handler gets `extra.authInfo.extra.identity` — the same person on every call, verified on every request, no session to keep.
 
 ```ts
 server.registerTool('list_orders', {
@@ -77,7 +89,7 @@ server.registerTool('list_orders', {
 ## Test it
 
 ```
-npm test                 # 9 tests: token minted like ZapQR mints it → full MCP round trip, no network
+npm test                 # 10 tests: token minted like ZapQR mints it → full MCP round trip + per-person isolation, no network
 npm run check            # tsc
 npx wrangler dev         # local, then add http://localhost:8787/mcp to Claude Desktop*
 ```
@@ -103,9 +115,9 @@ npx wrangler dev         # local, then add http://localhost:8787/mcp to Claude D
 ```
 src/index.ts   routes: metadata, home page, the /mcp gate, CORS
 src/auth.ts    RFC 9728 metadata · 401/403 challenge · JWT verification (jose) — the whole integration
-src/tools.ts   your tools (two samples)
+src/tools.ts   your tools (whoami, echo, remember/recall/forget on KV)
 test/          token minted like ZapQR mints it → 401 → verify → initialize → tools/list → tools/call
-wrangler.toml  name, compatibility date, the two optional vars
+wrangler.toml  name, compatibility date, the two optional vars, the NOTES KV binding
 ```
 
 Dependencies: `@modelcontextprotocol/sdk` (the protocol), `jose` (JWT + JWKS), `zod` (tool input schemas). Nothing else.

@@ -16,3 +16,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [observability]
 enabled = true
+
+# Per-person notes for the `remember` / `recall` tools (src/tools.ts). Create
+# yours with `npx wrangler kv namespace create NOTES` and paste the id here.
+[[kv_namespaces]]
+binding = "NOTES"
+id = "7a83c94eac0a4a68a486d4dc75062138"

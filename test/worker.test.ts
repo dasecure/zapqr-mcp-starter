@@ -88,7 +88,21 @@ test('bearerToken reads the header and nothing else', () => {
 
 // auth.ts reads keys from the issuer's /jwks; pin the local set for this issuer.
 useKeys(ISSUER, keys);
-const env = { ZAPQR_ISSUER: ISSUER, RESOURCE: RESOURCE };
+// An in-memory stand-in for the NOTES KV namespace, just enough for the tools.
+function fakeKV() {
+  const store = new Map<string, string>();
+  return {
+    store,
+    async put(k: string, v: string) { store.set(k, v); },
+    async get(k: string, _type?: string) { const v = store.get(k); return v === undefined ? null : JSON.parse(v); },
+    async delete(k: string) { store.delete(k); },
+    async list({ prefix = '', limit = 1000 }: { prefix?: string; limit?: number }) {
+      return { keys: [...store.keys()].filter((k) => k.startsWith(prefix)).slice(0, limit).map((name) => ({ name })), list_complete: true, cacheStatus: null };
+    },
+  } as unknown as KVNamespace & { store: Map<string, string> };
+}
+const NOTES = fakeKV();
+const env = { ZAPQR_ISSUER: ISSUER, RESOURCE: RESOURCE, NOTES };
 
 async function rpc(token: string | null, body: unknown) {
   const req = new Request(RESOURCE, {
@@ -141,7 +155,7 @@ test('the Worker: initialize → tools/list → tools/call, identity on the call
   const list = await rpc(token, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
   assert.equal(list.status, 200);
   const tools = (await list.json() as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name).sort();
-  assert.deepEqual(tools, ['echo', 'whoami']);
+  assert.deepEqual(tools, ['echo', 'forget', 'recall', 'remember', 'whoami']);
 
   const who = await rpc(token, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'whoami', arguments: {} } });
   assert.equal(who.status, 200);
@@ -153,4 +167,28 @@ test('the Worker: initialize → tools/list → tools/call, identity on the call
   const echo = await rpc(token, { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'echo', arguments: { text: 'hi' } } });
   const echoText = (await echo.json() as { result: { content: { text: string }[] } }).result.content[0].text;
   assert.equal(echoText, 'hi\n— owner@example.test');
+});
+
+test('the Worker: notes are isolated per person — two subs, one server', async () => {
+  const ana = await mint({ email: 'ana@example.test' });
+  const bob = await new SignJWT({ scope: `openid ${SCOPE}`, email: 'bob@example.test', email_verified: true })
+    .setProtectedHeader({ alg: 'RS256', kid: 'k1', typ: 'at+jwt' })
+    .setIssuer(ISSUER).setAudience(RESOURCE).setSubject('u-bob').setIssuedAt().setExpirationTime('1h').sign(privateKey);
+  const call = async (token: string, name: string, args: Record<string, unknown> = {}) => {
+    const r = await rpc(token, { jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name, arguments: args } });
+    assert.equal(r.status, 200);
+    return (await r.json() as { result: { content: { text: string }[] } }).result.content[0].text;
+  };
+  assert.match(await call(ana, 'remember', { note: 'the wifi is Bunny' }), /Remembered for ana@example.test/);
+  assert.match(await call(ana, 'remember', { note: 'ship the tweet' }), /Remembered/);
+  assert.match(await call(bob, 'remember', { note: 'bob only' }), /Remembered for bob@example.test/);
+  const anaNotes = await call(ana, 'recall');
+  assert.match(anaNotes, /wifi is Bunny/); assert.match(anaNotes, /ship the tweet/); assert.doesNotMatch(anaNotes, /bob only/);
+  const bobNotes = await call(bob, 'recall');
+  assert.match(bobNotes, /bob only/); assert.doesNotMatch(bobNotes, /Bunny/);
+  assert.match(await call(ana, 'forget'), /Forgot 2 notes/);
+  assert.match(await call(ana, 'recall'), /No notes yet/);
+  assert.match(await call(bob, 'recall'), /bob only/, "ana's forget did not touch bob");
+  // Every key in the store starts with a sub — the isolation is the key prefix.
+  for (const k of NOTES.store.keys()) assert.match(k, /^u-bob:/);
 });
