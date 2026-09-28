@@ -1,0 +1,18 @@
+# zapqr-mcp-starter — deploy with `npx wrangler deploy`.
+#
+# After the first deploy, register the printed URL + "/mcp" at
+# https://auth.zapqr.ai/account/agents. That exact string is the audience every
+# token carries; the Worker computes it from the request by default, so a
+# custom domain works the moment you register it too.
+
+name = "zapqr-mcp-starter"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# ZAPQR_ISSUER = "https://auth.zapqr.ai"   # default; override only for a self-hosted IdP
+# RESOURCE = "https://mcp.example.com/mcp" # default: <origin>/mcp of the incoming request
+
+[observability]
+enabled = true
