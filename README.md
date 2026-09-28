@@ -104,6 +104,20 @@ npx wrangler dev         # local, then add http://localhost:8787/mcp to Claude D
 
 **Your own agent**: any MCP client that implements the 2025-06-18 or later authorization flow. If yours only takes a URL and a static headers map, it can't run the flow — put an MCP-aware client in front of it.
 
+## See a finished one
+
+ZapQR runs its own MCP server, built the same way this starter is: **`https://auth.zapqr.ai/mcp`**. Connect it (Claude → Settings → Connectors → *Add custom connector*) and you'll see the whole flow — discovery, sign-in, consent, a tool call — before you write a line.
+
+It exposes your ZapQR account as tools an agent may use as you, behind two scopes:
+
+| Scope | Tools |
+|---|---|
+| `zapqr:sessions` — see and sign out your signed-in sessions | `list_sessions`, `sign_out_session {id}`, `sign_out_everywhere_else {confirm: true}` |
+| `zapqr:connections` — see and disconnect the sites and agents connected to your account | `list_connections`, `disconnect {id}` |
+| *(none)* | `whoami` |
+
+`list_sessions` marks the session that authorized the agent; `sign_out_everywhere_else` keeps that one and pushes a security notification. Disconnect the agent on [your account page](https://auth.zapqr.ai/account) and its next call is refused — the same lever your users will have over the server you build here.
+
 ## What this is not
 
 - **Not an API key.** A token is bound to one person, one agent, one server, and expires. If you want a long-lived machine credential, that's a different product.
